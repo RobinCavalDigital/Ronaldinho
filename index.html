@@ -116,7 +116,7 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
       <li><b>Touchscreen (telefoon dwars):</b> sleep links om te lopen, sleep rechts of op de vuurknop om te richten. Knoppen voor wapen wisselen, richten en granaten.</li>
       <li><b>Laptop:</b> WASD lopen, muis richten, klikken schieten, 1 t/m 6 of scrollen voor wapens, rechtermuisknop of Shift richten, G granaat, Q luchtaanval.</li>
       <li><b>Slopen:</b> muren, daken, kratten en containers gaan kapot. Rode vaten en auto's ontploffen, brandkranen spuiten water. Schiet het dak onder een sluipschutter weg.</li>
-      <li><b>Bouwen:</b> kies Bouwen met de Wapen-knop (of toets B). Vuur pakt het blok waar je naar kijkt, Richt zet het weer neer. Je begint met 20 blokken in je tas.</li>
+      <li><b>Bouwen:</b> kies Bouwen met de Wapen-knop (of toets B). Vuur pakt het blok waar je naar kijkt, Richt zet het weer neer. Blokken raken nooit op. Pak een ander soort blok op om daarmee verder te bouwen.</li>
       <li><b>Bevoorrading:</b> na elke golf landt een krat aan een parachute met granaten en een nieuw wapen. Kogels zijn oneindig.</li>
       <li><b>Luchtaanval:</b> 5 robots achter elkaar zonder zelf neer te gaan, en je mag straaljagers oproepen.</li>
     </ul>
@@ -488,7 +488,7 @@ function buildWorld(){
   scene.add(sl);worldObjs.push(sl);
   // the blocks themselves
   if(blockMesh){scene.remove(blockMesh);blockMesh.geometry.dispose();}
-  const SPARE=500,geo=G.box.clone(),tiles=new Float32Array((blockList.length+SPARE)*2);
+  const SPARE=3000,geo=G.box.clone(),tiles=new Float32Array((blockList.length+SPARE)*2);
   blockMesh=new T.InstancedMesh(geo,blockMat,blockList.length+SPARE);
   freeInst=[];for(let n=blockList.length+SPARE-1;n>=blockList.length;n--){blockMesh.setMatrixAt(n,ZERO);blockMesh.setColorAt(n,col.setRGB(1,1,1));freeInst.push(n);}blockMesh.castShadow=true;blockMesh.receiveShadow=true;
   blockList.forEach((b,n)=>{
@@ -788,7 +788,7 @@ function viewRay(){
 function pickBlock(){
   viewRay();const c=hitCell;
   if(c<0||occ[c]>=10)return;
-  if(inv.length>=99){toast('Je tas is vol');return;}
+  if(inv.length>=40)inv.shift();
   blockMesh.getColorAt(inst[c],col);inv.push({t:occ[c],c:col.getHex()});
   occ[c]=0;blockMesh.setMatrixAt(inst[c],ZERO);blockMesh.instanceMatrix.needsUpdate=true;freeInst.push(inst[c]);dirty=true;shadowDirty=true;
   beep(520,.05,'triangle',.05);
@@ -796,11 +796,12 @@ function pickBlock(){
 function placeBlock(){
   if(!inv.length){toast('Pak eerst een blok op');return;}
   const t=viewRay(),c=hitPrev;
-  if(t>=6.5||hitCell===-2||c<0||occ[c]||!freeInst.length)return;
+  if(t>=6.5||hitCell===-2||c<0||occ[c])return;
+  if(!freeInst.length){toast('Zoveel blokken past er niet in de stad');return;}
   cellPos(c,v1);
-  if(v1.y<2&&Math.abs(v1.x-P.x)<.84&&Math.abs(v1.z-P.z)<.84)return;
+  if(v1.y<2&&Math.hypot(Math.max(0,Math.abs(v1.x-P.x)-.5),Math.max(0,Math.abs(v1.z-P.z)-.5))<.36){toast('Te dichtbij, doe een stapje terug');return;}
   for(const e of enemies)if(Math.abs(v1.x-e.x)<.5+e.r&&Math.abs(v1.z-e.z)<.5+e.r&&v1.y>e.y-.5&&v1.y<e.y+e.h+.5)return;
-  const it=inv.pop(),n=freeInst.pop();
+  const it=inv[inv.length-1],n=freeInst.pop();
   occ[c]=it.t;bhp[c]=BT[it.t].hp;inst[c]=n;
   if(it.t===7)m4.makeScale(.66,.98,.66);else m4.identity();
   m4.setPosition(v1.x,v1.y,v1.z);blockMesh.setMatrixAt(n,m4);blockMesh.setColorAt(n,col.setHex(it.c));
@@ -1065,8 +1066,8 @@ function sync(dt){
   const key=[inv.length,cur,ammo[cur],res[cur],grenades,Math.round(P.hp/2),wave,score,strike,streak,reloadT>0,boss?Math.ceil(boss.hp/14):-1,enemies.length,queue.length].join('|');
   if(key!==hudKey){
     hudKey=key;
-    $('wname').textContent=w.name;$('wammo').textContent=cur===5?inv.length+(inv.length===1?' blok':' blokken'):'oneindig';
-    $('nades').textContent=cur===5?(inv.length?'Bovenop: '+BN[inv[inv.length-1].t]:'Tas is leeg'):'Granaten: '+grenades;
+    $('wname').textContent=w.name;$('wammo').textContent='oneindig';
+    $('nades').textContent=cur===5?(inv.length?'Blok: '+BN[inv[inv.length-1].t]:'Pak eerst een blok'):'Granaten: '+grenades;
     $('bFire').textContent=cur===5?'Pak':'Vuur';$('bAim').textContent=cur===5?'Zet':'Richt';
     guns.block.visible=inv.length>0;if(inv.length)guns.blockMat.color.setHex(BT[inv[inv.length-1].t].c);
     $('hpfill').style.width=Math.max(0,P.hp/P.max*100)+'%';$('hpfill').style.background=P.hp<35?'#ff5a3c':'#7bd88f';
