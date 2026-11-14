@@ -114,8 +114,9 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
       <summary>Hoe speel je?</summary>
     <ul class="how">
       <li><b>Touchscreen (telefoon dwars):</b> sleep links om te lopen, sleep rechts of op de vuurknop om te richten. Knoppen voor wapen wisselen, richten en granaten.</li>
-      <li><b>Laptop:</b> WASD lopen, muis richten, klikken schieten, 1 t/m 5 of scrollen voor wapens, rechtermuisknop of Shift richten, G granaat, Q luchtaanval.</li>
+      <li><b>Laptop:</b> WASD lopen, muis richten, klikken schieten, 1 t/m 6 of scrollen voor wapens, rechtermuisknop of Shift richten, G granaat, Q luchtaanval.</li>
       <li><b>Slopen:</b> muren, daken, kratten en containers gaan kapot. Rode vaten en auto's ontploffen, brandkranen spuiten water. Schiet het dak onder een sluipschutter weg.</li>
+      <li><b>Bouwen:</b> kies Bouwen met de Wapen-knop (of toets B). Vuur pakt het blok waar je naar kijkt, Richt zet het weer neer. Je begint met 20 blokken in je tas.</li>
       <li><b>Bevoorrading:</b> na elke golf landt een krat aan een parachute met granaten en een nieuw wapen. Kogels zijn oneindig.</li>
       <li><b>Luchtaanval:</b> 5 robots achter elkaar zonder zelf neer te gaan, en je mag straaljagers oproepen.</li>
     </ul>
@@ -487,8 +488,9 @@ function buildWorld(){
   scene.add(sl);worldObjs.push(sl);
   // the blocks themselves
   if(blockMesh){scene.remove(blockMesh);blockMesh.geometry.dispose();}
-  const geo=G.box.clone(),tiles=new Float32Array(blockList.length*2);
-  blockMesh=new T.InstancedMesh(geo,blockMat,blockList.length);blockMesh.castShadow=true;blockMesh.receiveShadow=true;
+  const SPARE=500,geo=G.box.clone(),tiles=new Float32Array((blockList.length+SPARE)*2);
+  blockMesh=new T.InstancedMesh(geo,blockMat,blockList.length+SPARE);
+  freeInst=[];for(let n=blockList.length+SPARE-1;n>=blockList.length;n--){blockMesh.setMatrixAt(n,ZERO);blockMesh.setColorAt(n,col.setRGB(1,1,1));freeInst.push(n);}blockMesh.castShadow=true;blockMesh.receiveShadow=true;
   blockList.forEach((b,n)=>{
     const B2=BT[b[3]],v=.9+rnd()*.2,tn=b[4]||[1,1,1];inst[ci(b[0],b[1],b[2])]=n;
     if(b[3]>=10)m4.copy(ZERO);else{if(b[3]===7)m4.makeScale(.66,.98,.66);else m4.identity();m4.setPosition(b[0]+.5,b[1]+.5,b[2]+.5);}
@@ -503,7 +505,7 @@ function cellPos(c,out){const y=c%GY,q=(c-y)/GY,z=q%GZ;out.set((q-z)/GZ+.5,y+.5,
 function removeBlock(c,vy){
   const t=occ[c];if(!t||t===11)return;
   if(t===10){destroyProp(propAt.get(c));return;}
-  occ[c]=0;blockMesh.setMatrixAt(inst[c],ZERO);blockMesh.instanceMatrix.needsUpdate=true;dirty=true;shadowDirty=true;
+  occ[c]=0;blockMesh.setMatrixAt(inst[c],ZERO);blockMesh.instanceMatrix.needsUpdate=true;dirty=true;shadowDirty=true;freeInst.push(inst[c]);
   if(BT[t].b)blocksGone++;
   cellPos(c,v1);
   debris(v1.x,v1.y,v1.z,BT[t].c,t===5?3:2,.38,vy||0);
@@ -530,16 +532,18 @@ function settle(){
   if(fell>3){noise(.7,300,.25);dirty=false;}
 }
 // walk a ray through the grid; returns distance and fills hitCell (-1 = ground, -2 = nothing)
-let hitCell=-2;
+let hitCell=-2,hitPrev=-1,freeInst=[],inv=[];
+const BN=['','Beton','Baksteen','Krat','Zandzak','Raam','Dak','Vat','Container','Airco'];
 function rayBlock(ox,oy,oz,dx,dy,dz,max){
   let x=Math.floor(ox),y=Math.floor(oy),z=Math.floor(oz),t=0;
   const sx=dx>0?1:-1,sy=dy>0?1:-1,sz=dz>0?1:-1;
   const tdx=dx?Math.abs(1/dx):1e9,tdy=dy?Math.abs(1/dy):1e9,tdz=dz?Math.abs(1/dz):1e9;
   let tx=dx?(dx>0?x+1-ox:ox-x)*tdx:1e9,ty=dy?(dy>0?y+1-oy:oy-y)*tdy:1e9,tz=dz?(dz>0?z+1-oz:oz-z)*tdz:1e9;
-  hitCell=-2;
+  hitCell=-2;hitPrev=-1;
   while(t<max){
     if(y<0){hitCell=-1;return dy<0?-oy/dy:t;}
     if(inb(x,y,z)&&occ[ci(x,y,z)]){hitCell=ci(x,y,z);return t;}
+    hitPrev=inb(x,y,z)?ci(x,y,z):-1;
     if(tx<ty&&tx<tz){x+=sx;t=tx;tx+=tdx;}else if(ty<tz){y+=sy;t=ty;ty+=tdy;}else{z+=sz;t=tz;tz+=tdz;}
   }
   return max;
@@ -589,7 +593,8 @@ const WP=[
   {name:'Aanvalsgeweer',dmg:15,rate:.1,mag:30,res:Infinity,spread:.022,pellets:1,blk:1,kick:.35},
   {name:'Shotgun',dmg:11,rate:.75,mag:6,res:Infinity,spread:.085,pellets:8,blk:1,kick:1},
   {name:'Scherpschuttersgeweer',dmg:130,rate:1.2,mag:5,res:Infinity,spread:.001,pellets:1,blk:4,kick:1.2,zoom:1},
-  {name:'Raketwerper',rate:1.4,mag:1,res:Infinity,rocket:1,kick:1.4}
+  {name:'Raketwerper',rate:1.4,mag:1,res:Infinity,rocket:1,kick:1.4},
+  {name:'Bouwen',rate:.2,mag:1,res:Infinity,build:1,kick:0}
 ];
 const CH=[{name:'Zayne',col:0x2f6fd6,speed:1.15,hp:100},{name:'Louah',col:0xe8632b,speed:1,hp:130}];let chosen=0;
 const RANKS=[[0,'Rekruut'],[500,'Korporaal'],[1500,'Sergeant'],[3000,'Luitenant'],[5000,'Kapitein'],[8000,'Generaal']];
@@ -603,6 +608,8 @@ function buildGuns(){
   mk(g=>{box(g,metal,.06,.07,.7,0,.03,-.2);box(g,wood,.075,.07,.26,0,-.03,-.3);box(g,wood,.065,.1,.3,0,-.02,.26);});
   mk(g=>{box(g,olive,.065,.09,.75,0,.02,-.15);box(g,metal,.03,.03,.5,0,.03,-.72);box(g,dark,.06,.06,.3,0,.11,-.1);box(g,olive,.065,.12,.3,0,-.02,.33);});
   mk(g=>{box(g,olive,.15,.15,.95,0,.06,-.1);box(g,dark,.17,.17,.1,0,.06,-.6);box(g,dark,.05,.14,.07,0,-.08,-.05);box(g,L(0x8a2f25),.1,.1,.2,0,.06,-.72);});
+  guns.blockMat=new T.MeshLambertMaterial({color:0xb8b4aa});
+  mk(g=>{guns.block=box(g,guns.blockMat,.17,.17,.17,-.02,.02,-.12);box(g,dark,.1,.09,.12,.01,-.09,.02);});
   // forearms reaching in from the bottom corners
   const arms=new T.Group(),sleeve=L(0x4d5a3c),zAxis=new T.Vector3(0,0,1);guns.sleeve=new T.MeshLambertMaterial({color:CH[0].col});
   const limb=(parent,mat,ax,ay,az,bx,by,bz,w)=>{
@@ -668,6 +675,7 @@ function makeEnemy(type){
   scene.add(g);
   return e;
 }
+const outline=new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(1.02,1.02,1.02)),new T.LineBasicMaterial({color:0xffffff}));outline.visible=false;scene.add(outline);
 const laserMat=new T.MeshBasicMaterial({color:0xff2b2b,transparent:true,opacity:.7,depthWrite:false});
 
 /* ---------- state ---------- */
@@ -676,7 +684,7 @@ let enemies=[],bolts=[],rockets=[],nades=[],crate=null,jets=[];
 let state='menu',time=0,last=0,pw=1,ph=1,yaw=0,pitch=0,shake=0,toastT=0,hitT=0,vigT=0;
 let wave=0,queue=[],spawnT=0,nextT=0,score=0,rank=0,streak=0,strike=0,kills=0,shots=0,hits=0,grenades=3;
 let cur=1,cool=0,reloadT=0,recoil=0,firing=false,aiming=false,jx=0,jy=0,locked=false,flashT=0;
-const own=[true,true,false,false,false],ammo=[12,30,6,5,1],res=[Infinity,Infinity,Infinity,Infinity,Infinity];
+const own=[true,true,false,false,false,true],ammo=[12,30,6,5,1,1],res=[Infinity,Infinity,Infinity,Infinity,Infinity,Infinity];
 const keys={},ptr=new Map();
 function toast(t){$('toast').textContent=t;toastT=2.8;}
 function addScore(n){
@@ -773,8 +781,35 @@ function finish(){
 }
 
 /* ---------- player actions ---------- */
+/* building: pick blocks up and put them down again */
+function viewRay(){
+  const cp=Math.cos(pitch);return rayBlock(P.x,1.6,P.z,-Math.sin(yaw)*cp,Math.sin(pitch),-Math.cos(yaw)*cp,6.5);
+}
+function pickBlock(){
+  viewRay();const c=hitCell;
+  if(c<0||occ[c]>=10)return;
+  if(inv.length>=99){toast('Je tas is vol');return;}
+  blockMesh.getColorAt(inst[c],col);inv.push({t:occ[c],c:col.getHex()});
+  occ[c]=0;blockMesh.setMatrixAt(inst[c],ZERO);blockMesh.instanceMatrix.needsUpdate=true;freeInst.push(inst[c]);dirty=true;shadowDirty=true;
+  beep(520,.05,'triangle',.05);
+}
+function placeBlock(){
+  if(!inv.length){toast('Pak eerst een blok op');return;}
+  const t=viewRay(),c=hitPrev;
+  if(t>=6.5||hitCell===-2||c<0||occ[c]||!freeInst.length)return;
+  cellPos(c,v1);
+  if(v1.y<2&&Math.abs(v1.x-P.x)<.84&&Math.abs(v1.z-P.z)<.84)return;
+  for(const e of enemies)if(Math.abs(v1.x-e.x)<.5+e.r&&Math.abs(v1.z-e.z)<.5+e.r&&v1.y>e.y-.5&&v1.y<e.y+e.h+.5)return;
+  const it=inv.pop(),n=freeInst.pop();
+  occ[c]=it.t;bhp[c]=BT[it.t].hp;inst[c]=n;
+  if(it.t===7)m4.makeScale(.66,.98,.66);else m4.identity();
+  m4.setPosition(v1.x,v1.y,v1.z);blockMesh.setMatrixAt(n,m4);blockMesh.setColorAt(n,col.setHex(it.c));
+  const at=blockMesh.geometry.attributes.aTile;at.setXY(n,BT[it.t].t[0],BT[it.t].t[1]);at.needsUpdate=true;
+  blockMesh.instanceMatrix.needsUpdate=true;blockMesh.instanceColor.needsUpdate=true;dirty=true;shadowDirty=true;
+  beep(330,.06,'square',.05);
+}
 function setWeapon(i){if(!own[i]||i===cur)return;cur=i;reloadT=0;cool=.25;aiming=aiming&&!!WP[i].zoom;beep(300,.04,'square',.03);}
-function cycleWeapon(d){let i=cur;do{i=(i+d+5)%5;}while(!own[i]);setWeapon(i);}
+function cycleWeapon(d){let i=cur;do{i=(i+d+6)%6;}while(!own[i]);setWeapon(i);}
 function reload(){
   const w=WP[cur];
   if(reloadT>0||ammo[cur]>=w.mag||res[cur]<=0)return;
@@ -794,6 +829,7 @@ function aimDir(out){
 function shoot(){
   const w=WP[cur];
   if(cool>0||reloadT>0||state!=='play')return;
+  if(w.build){cool=w.rate;pickBlock();return;}
   if(ammo[cur]<=0){reload();return;}
   cool=w.rate;recoil=Math.min(1.5,recoil+w.kick);flashT=.05;shots++;
   const ox=P.x,oy=1.6,oz=P.z,rx=Math.cos(yaw),rz=-Math.sin(yaw),base=aimDir(new T.Vector3());
@@ -866,6 +902,7 @@ function update(dt){
   if(reloadT>0){reloadT-=dt;if(reloadT<=0){const w=WP[cur],n=Math.min(w.mag-ammo[cur],res[cur]);ammo[cur]+=n;res[cur]-=n;beep(260,.05,'square',.04);}}
   recoil=Math.max(0,recoil-dt*4);
   if(firing)shoot();
+  if(cur===5&&aiming){aiming=false;placeBlock();}
   if(ammo[cur]<=0&&res[cur]>0&&reloadT<=0&&cool<=0)reload();
   // rockets, grenades, scheduled blasts
   for(const r of rockets){
@@ -984,11 +1021,11 @@ function sync(dt){
   const fov=zoom?16:aiming?52:70;
   if(Math.abs(camera.fov-fov)>.2){camera.fov+=(fov-camera.fov)*Math.min(1,dt*14);camera.updateProjectionMatrix();}
   $('scope').style.display=zoom?'block':'none';$('cross').style.display=zoom||state!=='play'?'none':'block';
-  guns.forEach((g,i)=>{g.visible=i===cur&&!zoom&&state==='play';});guns.arms.visible=!zoom&&state==='play';guns.armL.visible=cur!==0;guns.armLp.visible=cur===0;
+  guns.forEach((g,i)=>{g.visible=i===cur&&!zoom&&state==='play';});guns.arms.visible=!zoom&&state==='play';guns.armL.visible=cur>0&&cur<5;guns.armLp.visible=cur===0;
   const gr=guns.root,rl=reloadT>0?Math.sin(Math.min(1,reloadT/1.1)*Math.PI):0;
   gr.position.set(aiming?.0:.27+Math.sin(P.bob)*.012,-.25-rl*.22+Math.abs(Math.sin(P.bob))*.012-(aiming?-.07:0),-.5+recoil*.06);
   gr.rotation.x=recoil*.1-rl*.9;
-  if(flashT>0)flashT-=dt;guns.flash.visible=flashT>0&&!zoom&&cur!==4;guns.flash.rotation.z=time*40;
+  if(flashT>0)flashT-=dt;guns.flash.visible=flashT>0&&!zoom&&cur<4;guns.flash.rotation.z=time*40;
   for(const e of enemies){
     const b=e.b;e.m.position.set(e.x,e.y,e.z);b.rotation.y=e.face;
     const s=e.flash>0?1.08:1;b.scale.set(s,s,s);
@@ -1016,17 +1053,22 @@ function sync(dt){
   }
   for(let i=tracers.length-1;i>=0;i--){const t=tracers[i];t.life-=dt;if(t.life<=0){scene.remove(t.m);tracers.splice(i,1);}}
   for(let i=jets.length-1;i>=0;i--){const j=jets[i];j.life-=dt;j.m.position.x+=j.vx*dt;j.m.position.z+=j.vz*dt;if(j.life<=0){scene.remove(j.m);jets.splice(i,1);}}
+  if(cur===5&&state==='play'){
+    viewRay();const on=hitCell>=0&&occ[hitCell]<10;outline.visible=on;if(on){cellPos(hitCell,v1);outline.position.copy(v1);}
+  }else outline.visible=false;
   if(shadowDirty){renderer.shadowMap.needsUpdate=true;shadowDirty=false;}
   // HUD
   if(toastT>0)toastT-=dt;if(hitT>0)hitT-=dt;if(vigT>0)vigT-=dt;
   $('toast').style.opacity=Math.max(0,Math.min(1,toastT));$('hit').style.opacity=hitT>0?1:0;
   $('vig').style.opacity=Math.max(vigT>0?vigT/.6:0,P.hp<35?.5:0);
   const boss=enemies.find(e=>e.type==='mech');
-  const key=[cur,ammo[cur],res[cur],grenades,Math.round(P.hp/2),wave,score,strike,streak,reloadT>0,boss?Math.ceil(boss.hp/14):-1,enemies.length,queue.length].join('|');
+  const key=[inv.length,cur,ammo[cur],res[cur],grenades,Math.round(P.hp/2),wave,score,strike,streak,reloadT>0,boss?Math.ceil(boss.hp/14):-1,enemies.length,queue.length].join('|');
   if(key!==hudKey){
     hudKey=key;
-    $('wname').textContent=w.name;$('wammo').textContent='oneindig';
-    $('nades').textContent='Granaten: '+grenades;
+    $('wname').textContent=w.name;$('wammo').textContent=cur===5?inv.length+(inv.length===1?' blok':' blokken'):'oneindig';
+    $('nades').textContent=cur===5?(inv.length?'Bovenop: '+BN[inv[inv.length-1].t]:'Tas is leeg'):'Granaten: '+grenades;
+    $('bFire').textContent=cur===5?'Pak':'Vuur';$('bAim').textContent=cur===5?'Zet':'Richt';
+    guns.block.visible=inv.length>0;if(inv.length)guns.blockMat.color.setHex(BT[inv[inv.length-1].t].c);
     $('hpfill').style.width=Math.max(0,P.hp/P.max*100)+'%';$('hpfill').style.background=P.hp<35?'#ff5a3c':'#7bd88f';
     $('wave').textContent=wave?'Missie '+wave+'/5: '+WNAMES[wave-1]:'Briefing';
     $('score').textContent=CH[chosen].name+' / '+RANKS[rank][1]+' · '+score+' punten';
@@ -1136,7 +1178,8 @@ addEventListener('keydown',e=>{
   if(c==='Space'){firing=true;e.preventDefault();}
   else if(c==='KeyR')reload();else if(c==='KeyG')throwNade();else if(c==='KeyQ')callStrike();
   else if(c.startsWith('Shift'))aiming=true;
-  else if(c.startsWith('Digit')){const n=+c.slice(5)-1;if(n>=0&&n<5)setWeapon(n);}
+  else if(c.startsWith('Digit')){const n=+c.slice(5)-1;if(n>=0&&n<6)setWeapon(n);}
+  else if(c==='KeyB')setWeapon(5);
   else if(c.startsWith('Arrow'))e.preventDefault();
 });
 addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='Space')firing=false;if(e.code.startsWith('Shift'))aiming=false;});
@@ -1152,7 +1195,8 @@ function newGame(){
   buildWorld();
   Object.assign(P,{x:BX,z:BZ,hp:P.max,hurtT:9,bob:0});yaw=0;pitch=0;
   wave=0;queue=[];score=0;rank=0;streak=0;strike=0;kills=0;shots=0;hits=0;grenades=3;cur=1;cool=0;reloadT=0;recoil=0;firing=false;aiming=false;
-  [true,true,false,false,false].forEach((v,i)=>{own[i]=v;ammo[i]=WP[i].mag;res[i]=WP[i].res;});
+  inv=[];for(let i=0;i<15;i++)inv.push({t:1,c:0xd9d5cc});for(let i=0;i<5;i++)inv.push({t:4,c:0xffffff});
+  [true,true,false,false,false,true].forEach((v,i)=>{own[i]=v;ammo[i]=WP[i].mag;res[i]=WP[i].res;});
   nextT=2.5;toast('Verdedig de stad!');
 }
 function pause(){
@@ -1169,7 +1213,7 @@ function start(){
   try{if(!ac)ac=new(window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();}catch(e){ac=null;}
   $('start').hidden=true;$('end').hidden=true;$('pause').hidden=true;
   const c=CH[chosen];P.max=c.hp;P.speed=c.speed;guns.sleeve.color.setHex(c.col);
-  if(played)newGame();else{played=true;P.hp=P.max;nextT=2.5;toast('Verdedig de stad!');}
+  if(played)newGame();else{played=true;P.hp=P.max;for(let i=0;i<15;i++)inv.push({t:1,c:0xd9d5cc});for(let i=0;i<5;i++)inv.push({t:4,c:0xffffff});nextT=2.5;toast('Verdedig de stad!');}
   state='play';wrap.classList.add('play');
 }
 $('go').addEventListener('click',start);
@@ -1178,7 +1222,7 @@ $('again').addEventListener('click',toMenu);
   chosen=i;[0,1].forEach(j=>{$('ch'+j).classList.toggle('sel',j===i);$('ch'+j).setAttribute('aria-checked',j===i?'true':'false');});
 }));
 buildGuns();buildWorld();resize();
-window.__schroot={P,enemies:()=>enemies,crate:()=>crate,aim:(y,p)=>{yaw=y;pitch=p;},fire:v=>{firing=v;},info:()=>({wave,score,kills,cur,blocksGone,blocksTotal,hp:P.hp})};
+window.__schroot={P,enemies:()=>enemies,crate:()=>crate,aim:(y,p)=>{yaw=y;pitch=p;},fire:v=>{firing=v;},build:()=>({inv:inv.length,free:freeInst.length}),info:()=>({wave,score,kills,cur,blocksGone,blocksTotal,hp:P.hp})};
 requestAnimationFrame(frame);
 })();
 </script>
