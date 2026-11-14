@@ -116,7 +116,7 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
       <li><b>Touchscreen (telefoon dwars):</b> sleep links om te lopen, sleep rechts of op de vuurknop om te richten. Knoppen voor wapen wisselen, richten en granaten.</li>
       <li><b>Laptop:</b> WASD lopen, muis richten, klikken schieten, 1 t/m 6 of scrollen voor wapens, rechtermuisknop of Shift richten, G granaat, Q luchtaanval.</li>
       <li><b>Slopen:</b> muren, daken, kratten en containers gaan kapot. Rode vaten en auto's ontploffen, brandkranen spuiten water. Schiet het dak onder een sluipschutter weg.</li>
-      <li><b>Bouwen:</b> kies Bouwen met de Wapen-knop (of toets B). Vuur pakt het blok waar je naar kijkt, Richt zet het weer neer. Blokken raken nooit op. Pak een ander soort blok op om daarmee verder te bouwen.</li>
+      <li><b>Bouwen:</b> kies Bouwen met de Wapen-knop (of toets B). Vuur (of klikken) pakt het blok waar je naar kijkt, Richt (of toets E) zet het weer neer. Blokken raken nooit op. Pak een ander soort blok op om daarmee verder te bouwen.</li>
       <li><b>Bevoorrading:</b> na elke golf landt een krat aan een parachute met granaten en een nieuw wapen. Kogels zijn oneindig.</li>
       <li><b>Luchtaanval:</b> 5 robots achter elkaar zonder zelf neer te gaan, en je mag straaljagers oproepen.</li>
     </ul>
@@ -483,14 +483,14 @@ function buildWorld(){
   }
   const dm=D.mesh();scene.add(dm);worldObjs.push(dm);
   const gr=new T.Mesh(G.box,groundMat);gr.scale.set(600,1,600);gr.position.set(BX,-.5,60);gr.receiveShadow=true;scene.add(gr);worldObjs.push(gr);
-  const sl=new T.InstancedMesh(G.box,paveMat,slabs.length);sl.receiveShadow=true;
+  const sl=new T.InstancedMesh(G.box,paveMat,slabs.length);sl.receiveShadow=true;sl.frustumCulled=false;
   slabs.forEach((q,n)=>{m4.makeScale(16,.12,14);m4.setPosition(q[0],.06,q[1]);sl.setMatrixAt(n,m4);});
   scene.add(sl);worldObjs.push(sl);
   // the blocks themselves
   if(blockMesh){scene.remove(blockMesh);blockMesh.geometry.dispose();}
   const SPARE=3000,geo=G.box.clone(),tiles=new Float32Array((blockList.length+SPARE)*2);
   blockMesh=new T.InstancedMesh(geo,blockMat,blockList.length+SPARE);
-  freeInst=[];for(let n=blockList.length+SPARE-1;n>=blockList.length;n--){blockMesh.setMatrixAt(n,ZERO);blockMesh.setColorAt(n,col.setRGB(1,1,1));freeInst.push(n);}blockMesh.castShadow=true;blockMesh.receiveShadow=true;
+  freeInst=[];for(let n=blockList.length+SPARE-1;n>=blockList.length;n--){blockMesh.setMatrixAt(n,ZERO);blockMesh.setColorAt(n,col.setRGB(1,1,1));freeInst.push(n);}blockMesh.castShadow=true;blockMesh.receiveShadow=true;blockMesh.frustumCulled=false;
   blockList.forEach((b,n)=>{
     const B2=BT[b[3]],v=.9+rnd()*.2,tn=b[4]||[1,1,1];inst[ci(b[0],b[1],b[2])]=n;
     if(b[3]>=10)m4.copy(ZERO);else{if(b[3]===7)m4.makeScale(.66,.98,.66);else m4.identity();m4.setPosition(b[0]+.5,b[1]+.5,b[2]+.5);}
@@ -809,7 +809,9 @@ function placeBlock(){
   blockMesh.instanceMatrix.needsUpdate=true;blockMesh.instanceColor.needsUpdate=true;dirty=true;shadowDirty=true;
   beep(330,.06,'square',.05);
 }
-function setWeapon(i){if(!own[i]||i===cur)return;cur=i;reloadT=0;cool=.25;aiming=aiming&&!!WP[i].zoom;beep(300,.04,'square',.03);}
+function setWeapon(i){if(!own[i]||i===cur)return;
+  if(i===5){const touch=wrap.classList.contains('touch')||(window.matchMedia&&window.matchMedia('(any-pointer:coarse)').matches);toast(touch?'Pak = blok oppakken, Zet = blok neerzetten':'Klik = oppakken, E of rechtermuisknop = neerzetten');}
+  cur=i;reloadT=0;cool=.25;aiming=aiming&&!!WP[i].zoom;beep(300,.04,'square',.03);}
 function cycleWeapon(d){let i=cur;do{i=(i+d+6)%6;}while(!own[i]);setWeapon(i);}
 function reload(){
   const w=WP[cur];
@@ -1181,6 +1183,7 @@ addEventListener('keydown',e=>{
   else if(c.startsWith('Shift'))aiming=true;
   else if(c.startsWith('Digit')){const n=+c.slice(5)-1;if(n>=0&&n<6)setWeapon(n);}
   else if(c==='KeyB')setWeapon(5);
+  else if(c==='KeyE'){if(cur===5)placeBlock();}
   else if(c.startsWith('Arrow'))e.preventDefault();
 });
 addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='Space')firing=false;if(e.code.startsWith('Shift'))aiming=false;});
