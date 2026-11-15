@@ -59,7 +59,11 @@ body{background:var(--steel);color:var(--text);font-family:var(--body);overflow:
 .card .ch{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:center;text-align:left;background:rgba(238,241,238,.08);color:var(--text);
   border:2px solid rgba(238,241,238,.3);border-radius:10px;padding:10px;font-family:var(--body);font-size:14px;font-weight:500;letter-spacing:0;line-height:1.2}
 .card .ch b{font-family:var(--display);font-weight:400;font-size:20px;color:var(--text)}
-.card .ch .av{grid-row:1 / span 2;width:50px;height:50px;border-radius:12px;position:relative;
+.card .ch .rec{color:var(--amber);font-weight:700;font-size:13px}
+.board{white-space:pre-line;margin-top:8px}
+.card .small{font-size:13px;font-family:var(--body);font-weight:700;padding:7px 12px;margin-top:8px;letter-spacing:0}
+#lead2{color:var(--amber);font-weight:700}
+.card .ch .av{grid-row:1 / span 3;width:50px;height:50px;border-radius:12px;position:relative;
   background:linear-gradient(var(--c) 0 42%,#14181c 42% 68%,var(--c) 68%)}
 .card .ch .av:before{content:"";position:absolute;left:9px;top:25px;width:14px;height:4px;border-radius:2px;background:rgba(255,255,255,.55)}
 .card .ch.sel{border-color:var(--amber);background:rgba(255,178,46,.18)}
@@ -110,10 +114,16 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
     <h1>Operatie Pakjesavond</h1>
     <p id="lead" class="lead">Een vloek heeft de Pieten in zombies veranderd en ze hebben alle pakjes gestolen. Versla de vijf eindbazen en red pakjesavond. De pijl bovenin wijst steeds naar je doel.</p>
     <div class="pick" role="radiogroup" aria-label="Kies je soldaat">
-      <button type="button" class="ch sel" id="ch0" role="radio" aria-checked="true"><span class="av" style="--c:#2f6fd6"></span><b>Zayne</b><span>Snel: loopt 15% sneller</span></button>
-      <button type="button" class="ch" id="ch1" role="radio" aria-checked="false"><span class="av" style="--c:#e8632b"></span><b>Louah</b><span>Taai: 30% meer gezondheid</span></button>
+      <button type="button" class="ch sel" id="ch0" role="radio" aria-checked="true"><span class="av" style="--c:#2f6fd6"></span><b>Zayne</b><span>Snel: loopt 15% sneller</span><span id="rec0" class="rec"></span></button>
+      <button type="button" class="ch" id="ch1" role="radio" aria-checked="false"><span class="av" style="--c:#e8632b"></span><b>Louah</b><span>Taai: 30% meer gezondheid</span><span id="rec1" class="rec"></span></button>
     </div>
+    <p id="lead2" class="path"></p>
     <button id="go" type="button">Start missie</button>
+    <details>
+      <summary>Ranglijst</summary>
+      <p id="board" class="path board"></p>
+      <button id="wipe" type="button" class="ghost small">Ranglijst wissen</button>
+    </details>
     <details>
       <summary>Hoe speel je?</summary>
     <ul class="how">
@@ -879,10 +889,32 @@ function pickUp(i){
   const u=upChoice[i];u.f();picked.push(u.n);
   $('upg').hidden=true;state='play';wrap.classList.add('play');nextT=3;toast(u.n+'!');beep(880,.15,'triangle',.07);
 }
+/* ---------- leaderboard, kept on this device ---------- */
+const SKEY='pakjesavond.scores.v1';let runSaved=false;
+function loadScores(){try{const a=JSON.parse(localStorage.getItem(SKEY)||'[]');return Array.isArray(a)?a:[];}catch(e){return[];}}
+function fmt(n){return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
+function saveRun(){
+  if(runSaved||!score)return false;
+  runSaved=true;
+  const a=loadScores(),name=CH[chosen].name,best=a.filter(x=>x.n===name).reduce((m,x)=>Math.max(m,x.s),0);
+  a.push({n:name,s:score,r:RANKS[rank][1],w:wave,k:kills,d:Date.now()});a.sort((x,y)=>y.s-x.s);
+  try{localStorage.setItem(SKEY,JSON.stringify(a.slice(0,20)));}catch(e){}
+  return score>best;
+}
+function showBoard(){
+  const a=loadScores(),best=CH.map(c=>a.find(x=>x.n===c.name));
+  best.forEach((b,i)=>{$('rec'+i).textContent=b?'Record: '+fmt(b.s)+' ('+b.r+')':'Nog geen record';});
+  let lead='';
+  if(best[0]&&best[1])lead=best[0].s===best[1].s?'Gelijkspel: allebei '+fmt(best[0].s)+' punten':(best[0].s>best[1].s?CH[0].name:CH[1].name)+' staat voor met '+fmt(Math.abs(best[0].s-best[1].s))+' punten';
+  else if(best[0]||best[1])lead=(best[0]?CH[0].name:CH[1].name)+' heeft het eerste record gezet';
+  $('lead2').textContent=lead;
+  $('board').textContent=a.length?a.slice(0,10).map((x,i)=>(i+1)+'. '+x.n+'  '+fmt(x.s)+'  ('+x.r+', missie '+x.w+')').join('\n'):'Nog geen scores. Speel een missie!';
+}
 function finish(){
   state='over';wrap.classList.remove('play');if(document.exitPointerLock)try{document.exitPointerLock();}catch(e){}
   const pct=blocksTotal?Math.round(blocksGone/blocksTotal*100):0,acc=shots?Math.round(hits/shots*100):0;
-  $('endtext').textContent='De pakjes zijn terug. '+CH[chosen].name+', rang '+RANKS[rank][1]+'. Score: '+score+' punten. Zombies verslagen: '+kills+'. Raak geschoten: '+acc+'%. Van de stad gesloopt: '+pct+'%.';
+  const rec=saveRun();showBoard();
+  $('endtext').textContent=(rec?'Nieuw record! ':'')+'De pakjes zijn terug. '+CH[chosen].name+', rang '+RANKS[rank][1]+'. Score: '+score+' punten. Zombies verslagen: '+kills+'. Raak geschoten: '+acc+'%. Van de stad gesloopt: '+pct+'%.';
   $('end').hidden=false;[523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,.25,'triangle',.07),i*140));
 }
 
@@ -1341,7 +1373,7 @@ function pause(){
   if(document.exitPointerLock)try{document.exitPointerLock();}catch(e){}
 }
 function resume(){if(state!=='pause')return;state='play';wrap.classList.add('play');$('pause').hidden=true;}
-function toMenu(){state='over';wrap.classList.remove('play');$('upg').hidden=true;$('pause').hidden=true;$('end').hidden=true;$('start').hidden=false;}
+function toMenu(){if(state==='pause'){saveRun();}showBoard();$('wipe').textContent='Ranglijst wissen';state='over';wrap.classList.remove('play');$('upg').hidden=true;$('pause').hidden=true;$('end').hidden=true;$('start').hidden=false;}
 [0,1,2].forEach(i=>$('up'+i).addEventListener('click',()=>pickUp(i)));
 $('bMenu').addEventListener('click',pause);$('resume').addEventListener('click',resume);$('reset').addEventListener('click',toMenu);
 addEventListener('keydown',e=>{if(e.code==='Escape'||e.code==='KeyP'){if(state==='play')pause();else if(state==='pause')resume();}});
@@ -1349,16 +1381,23 @@ let played=false;
 function start(){
   try{if(!ac)ac=new(window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();}catch(e){ac=null;}
   $('start').hidden=true;$('end').hidden=true;$('pause').hidden=true;
+  runSaved=false;
   const c=CH[chosen];P.max=c.hp;P.speed=c.speed;P.dmg=1;P.rate=1;P.blast=1;P.regen=1;P.nadeMax=4;picked=[];$('upg').hidden=true;guns.sleeve.color.setHex(c.col);
   if(played)newGame();else{played=true;P.hp=P.max;for(let i=0;i<15;i++)inv.push({t:1,c:0xd9d5cc});for(let i=0;i<5;i++)inv.push({t:4,c:0xffffff});nextT=2.5;toast('Red pakjesavond!');}
   state='play';wrap.classList.add('play');
 }
 $('go').addEventListener('click',start);
+$('wipe').addEventListener('click',()=>{
+  const b=$('wipe');
+  if(b.textContent!=='Zeker weten? Tik nog een keer'){b.textContent='Zeker weten? Tik nog een keer';return;}
+  try{localStorage.removeItem(SKEY);}catch(e){}
+  b.textContent='Ranglijst wissen';showBoard();
+});
 $('again').addEventListener('click',toMenu);
 [0,1].forEach(i=>$('ch'+i).addEventListener('click',()=>{
   chosen=i;[0,1].forEach(j=>{$('ch'+j).classList.toggle('sel',j===i);$('ch'+j).setAttribute('aria-checked',j===i?'true':'false');});
 }));
-buildGuns();buildWorld();resize();
+buildGuns();buildWorld();resize();showBoard();
 window.__schroot={P,enemies:()=>enemies,crate:()=>crate,aim:(y,p)=>{yaw=y;pitch=p;},fire:v=>{firing=v;},build:()=>({inv:inv.length,free:freeInst.length}),info:()=>({wave,score,kills,cur,blocksGone,blocksTotal,hp:P.hp})};
 requestAnimationFrame(frame);
 })();
